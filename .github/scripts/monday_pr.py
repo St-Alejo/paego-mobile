@@ -1,7 +1,7 @@
 """Refleja cada pull request en el tablero "Tareas" de monday.com.
 
 Lo ejecuta .github/workflows/monday.yml. Por cada PR mantiene un solo elemento
-(nombre "PR #<n> · <repo>: <título>") en el grupo del sprint según la fecha:
+(nombre "PR #<n> · <repo>: <título>") en el grupo de la fase o iteración XP según la fecha:
 
 - abierto o listo para revisión -> "En revisión"; borrador -> "En curso";
 - fusionado -> "Hecho"; cerrado sin fusionar -> "Pendiente".
@@ -19,16 +19,22 @@ from datetime import date, datetime, timedelta, timezone
 API = "https://api.monday.com/v2"
 BOGOTA = timezone(timedelta(hours=-5))
 
-# Inicio de cada sprint de 5 semanas (10 mar – 16 nov 2026) -> id del grupo en el tablero Tareas.
+# Inicio de cada fase o iteración XP (10 mar – 16 nov 2026) -> id del grupo en el tablero
+# "2. Fases, iteraciones y tareas". Después del 2 nov todo cae en Cierre.
 SPRINTS = [
-    (date(2026, 3, 10), "group_mm90yd5b"),
-    (date(2026, 4, 14), "group_mm90geys"),
-    (date(2026, 5, 19), "group_mm90sdt2"),
-    (date(2026, 6, 23), "group_mm907mh4"),
-    (date(2026, 7, 28), "group_mm90schc"),
-    (date(2026, 9, 1), "group_mm90h2kp"),
-    (date(2026, 10, 6), "group_mm90zqwx"),
-    (date(2026, 11, 16), "group_mm90n3j6"),
+    (date(2026, 3, 10), "group_mm90y2q5"),  # Exploración
+    (date(2026, 4, 20), "group_mm90b9j5"),  # Planificación
+    (date(2026, 5, 4), "group_mm90yd5b"),  # It1
+    (date(2026, 5, 18), "group_mm90geys"),  # It2
+    (date(2026, 6, 1), "group_mm90sdt2"),  # It3
+    (date(2026, 6, 15), "group_mm907mh4"),  # It4
+    (date(2026, 6, 29), "group_mm90schc"),  # It5
+    (date(2026, 7, 13), "group_mm90h2kp"),  # It6
+    (date(2026, 7, 27), "group_mm90e39k"),  # It7
+    (date(2026, 8, 10), "group_mm90wqfy"),  # It8
+    (date(2026, 8, 24), "group_mm906s1r"),  # Producción
+    (date(2026, 10, 19), "group_mm90s4pc"),  # Mantenimiento
+    (date(2026, 11, 2), "group_mm90zqwx"),  # Cierre
 ]
 
 # Usuario de GitHub -> (etiqueta "Responsable", id de persona en monday).
