@@ -1,0 +1,30 @@
+# Integración con monday.com (gestión ágil del proyecto).
+# Cada pull request queda como un elemento del tablero "Tareas", en el grupo
+# del sprint, y su estado sigue al PR: revisión -> fusionado = "Hecho".
+# Requiere el secreto MONDAY_TOKEN (token personal de la API de monday).
+name: monday
+
+on:
+  pull_request:
+    types: [opened, reopened, edited, ready_for_review, converted_to_draft, closed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: monday-pr-${{ github.event.pull_request.number }}
+
+jobs:
+  sincronizar:
+    name: Sincronizar PR con monday
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - name: Crear o actualizar el elemento en monday
+        run: python3 .github/scripts/monday_pr.py
+        env:
+          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}
+          MONDAY_BOARD_ID: ${{ vars.MONDAY_BOARD_ID || '18439500074' }}
