@@ -19,15 +19,15 @@ from datetime import date, datetime, timedelta, timezone
 API = "https://api.monday.com/v2"
 BOGOTA = timezone(timedelta(hours=-5))
 
-# Inicio de cada sprint (2026) -> id del grupo en el tablero Tareas.
+# Inicio de cada sprint de 5 semanas (10 mar – 16 nov 2026) -> id del grupo en el tablero Tareas.
 SPRINTS = [
-    (date(2026, 8, 10), "group_mm90yd5b"),
-    (date(2026, 8, 24), "group_mm90geys"),
-    (date(2026, 9, 7), "group_mm90sdt2"),
-    (date(2026, 9, 21), "group_mm907mh4"),
-    (date(2026, 10, 5), "group_mm90schc"),
-    (date(2026, 10, 19), "group_mm90h2kp"),
-    (date(2026, 11, 2), "group_mm90zqwx"),
+    (date(2026, 3, 10), "group_mm90yd5b"),
+    (date(2026, 4, 14), "group_mm90geys"),
+    (date(2026, 5, 19), "group_mm90sdt2"),
+    (date(2026, 6, 23), "group_mm907mh4"),
+    (date(2026, 7, 28), "group_mm90schc"),
+    (date(2026, 9, 1), "group_mm90h2kp"),
+    (date(2026, 10, 6), "group_mm90zqwx"),
     (date(2026, 11, 16), "group_mm90n3j6"),
 ]
 
