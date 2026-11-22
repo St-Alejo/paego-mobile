@@ -1,19 +1,13 @@
 import 'dart:convert';
-import 'dart:math';
-import 'dart:ui' show Rect;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:image/image.dart' as img;
 import 'package:opaego/data/datasources/database_helper.dart';
 import 'package:opaego/data/models/estudiante.dart';
 import 'package:opaego/data/models/user_role.dart';
 import 'package:opaego/data/remote/api_client.dart';
 import 'package:opaego/data/repositories/estudiantes_repository.dart';
-import 'package:opaego/data/services/rostro/cofre.dart';
-import 'package:opaego/data/services/rostro/comparador.dart';
-import 'package:opaego/data/services/rostro/preprocesado.dart';
 import 'package:opaego/data/sync/sync_service.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -25,22 +19,15 @@ http.Response _json(Object cuerpo) => http.Response(
   headers: {'content-type': 'application/json; charset=utf-8'},
 );
 
-/// Vector "facial" falso y determinista (192 dimensiones, como MobileFaceNet).
-List<double> vectorDe(int semilla, {double ruido = 0}) {
-  final base = Random(semilla);
-  final r = Random(semilla * 7919 + 1);
-  return normalizar([
-    for (var i = 0; i < 192; i++)
-      base.nextDouble() * 2 - 1 + (r.nextDouble() * 2 - 1) * ruido,
-  ]);
-}
+/// Código QR de prueba del estudiante [id].
+String codigoDe(int id) => 'cod-$id-AbC_x';
 
+/// JSON de `GET /api/estudiantes/` (contrato con códigos QR).
 Map<String, dynamic> estudianteJson(
   int id, {
   String grado = '7',
   String grupo = 'B',
-  bool autorizado = false,
-  bool rostro = false,
+  bool conQr = true,
   Map<String, dynamic>? entrega,
 }) => {
   'id': id,
@@ -54,98 +41,60 @@ Map<String, dynamic> estudianteJson(
   'grupo': grupo,
   'curso': '$grado° $grupo',
   'jornada': 'MAÑANA',
-  'autorizacion_vigente': autorizado,
-  'rostro_inscrito': rostro,
+  'codigo_qr': conQr ? codigoDe(id) : null,
   'entrega_del_dia': entrega,
 };
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('comparador', () {
-    test('reconoce a la persona correcta entre las del curso', () {
-      final plantillas = {
-        for (var id = 1; id <= 35; id++)
-          id: [vectorDe(id, ruido: 0.05), vectorDe(id, ruido: 0.1)],
-      };
-      final c = identificar(vectorDe(17, ruido: 0.15), plantillas, umbral: 0.8);
-      expect(c?.estudianteId, 17);
-      expect(c!.similitud, greaterThan(0.8));
-      expect(c.ambigua(), isFalse);
+  group('contenido del QR', () {
+    test('solo acepta el prefijo PAEGO-E1 con un código', () {
+      expect(codigoDeQr('PAEGO-E1:abc123'), 'abc123');
+      expect(codigoDeQr('  PAEGO-E1:abc123\n'), 'abc123');
+      expect(codigoDeQr('PAEGO-E1:'), isNull);
+      expect(codigoDeQr('PAEGO-E2:abc'), isNull);
+      expect(codigoDeQr('https://ejemplo.com'), isNull);
+      expect(codigoDeQr(''), isNull);
+      expect(codigoDeQr(null), isNull);
     });
 
-    test('un desconocido no alcanza el umbral', () {
-      final plantillas = {
-        for (var id = 1; id <= 35; id++) id: [vectorDe(id)],
-      };
-      expect(identificar(vectorDe(999), plantillas, umbral: 0.8), isNull);
+    test('el estudiante arma el texto de su QR y lee el contrato', () {
+      final e = Estudiante.fromJson(estudianteJson(3));
+      expect(e.codigoQr, codigoDe(3));
+      expect(e.contenidoQr, 'PAEGO-E1:${codigoDe(3)}');
+      expect(codigoDeQr(e.contenidoQr), e.codigoQr);
+      expect((e.jornada, e.gradoEtiqueta), ('MAÑANA', '7°'));
+      // El rol institución puede no recibir el código.
+      final sinQr = Estudiante.fromJson(estudianteJson(4, conQr: false));
+      expect(sinQr.codigoQr, isNull);
+      expect(sinQr.contenidoQr, isNull);
     });
 
-    test('las muestras de otra persona no son consistentes', () {
+    test('nombres legibles del método (incluye las entregas faciales '
+        'anteriores)', () {
+      expect(metodoEntregaLegible('QR'), 'Código QR');
+      expect(metodoEntregaLegible('MANUAL'), 'Manual');
+      expect(metodoEntregaLegible('FACIAL'), 'Reconocimiento facial');
       expect(
-        muestrasConsistentes([
-          vectorDe(1, ruido: 0.1),
-          vectorDe(1, ruido: 0.2),
-        ]),
-        isTrue,
+        metodoEntregaLegible('FACIAL', espanol: false),
+        'Face recognition',
       );
-      expect(muestrasConsistentes([vectorDe(1), vectorDe(2)]), isFalse);
-      expect(() => normalizar([0, 0, 0]), throwsArgumentError);
     });
   });
 
-  group('preprocesado', () {
-    test('la entrada del modelo queda en [-1, 1] y del tamaño pedido', () {
-      final foto = img.Image(width: 400, height: 300);
-      img.fill(foto, color: img.ColorRgb8(255, 0, 128));
-      final recorte = recortarCara(
-        foto,
-        const Rect.fromLTWH(300, 200, 150, 150), // se sale de la foto
-      );
-      expect(recorte.width, recorte.height);
-      expect(recorte.width, 115); // recortado al borde de la foto
-      final t = tensorDeEntrada(recorte, 112);
-      expect(t.first.length, 112);
-      expect(t.first.first.length, 112);
-      final px = t.first.first.first; // NHWC: [1][y][x][canal]
-      expect(px[0], closeTo(1, 1e-6));
-      expect(px[1], closeTo(-1, 1e-6));
-
-      // Qualcomm MobileFaceNet: NCHW y píxeles en [0, 1].
-      final nchw = tensorDeEntrada(
-        recorte,
-        112,
-        canalesPrimero: true,
-        minimo: 0,
-        maximo: 1,
-      );
-      expect(nchw.first.length, 3);
-      expect(nchw.first[0][5][7], closeTo(1, 1e-6)); // rojo
-      expect(nchw.first[1][5][7], closeTo(0, 1e-6)); // verde
-      expect(nchw.first[2][5][7], closeTo(128 / 255, 1e-6)); // azul
+  test('muestra la sigla del documento y la jornada legible del SIMAT', () {
+    final e = Estudiante.fromJson({
+      ...estudianteJson(1),
+      'tipo_documento': '5',
+      'tipo_documento_etiqueta': 'RC',
+      'jornada': '6',
+      'jornada_etiqueta': 'Única',
     });
-  });
-
-  group('cofre', () {
-    test(
-      'borrar la clave sin el plugin no rompe el cierre de sesión',
-      () async {
-        TestWidgetsFlutterBinding.ensureInitialized();
-        await expectLater(AlmacenClaveSeguro().borrar(), completes);
-      },
-    );
-
-    test('cifra y descifra; sin la clave no se puede leer', () async {
-      final almacen = AlmacenClaveEnMemoria();
-      final cofre = Cofre(almacen);
-      final texto = await cofre.cifrar({'7': vectorDe(1)});
-      expect(texto, isNot(contains('0.')));
-      expect(((await cofre.descifrar(texto)) as Map)['7'], hasLength(192));
-      await cofre.destruirClave();
-      expect(await almacen.leer(), isNull);
-      // Clave nueva: lo anterior queda ilegible.
-      await expectLater(cofre.descifrar(texto), throwsA(anything));
-    });
+    expect(e.documento, 'RC 101');
+    expect(e.jornada, 'Única');
+    // Sin etiquetas (servidor anterior) se usa el código tal cual.
+    expect(Estudiante.fromJson(estudianteJson(2)).documento, 'TI 102');
   });
 
   test('rol SUPERVISOR del backend', () {
@@ -161,7 +110,6 @@ void main() {
     final repo = EstudiantesRepository.instance;
     late List<Map<String, dynamic>> enServidor;
     late List<Map<String, dynamic>> lotes;
-    late Map<int, List<List<double>>> plantillasServidor;
     var hayRed = true;
 
     setUpAll(() async {
@@ -180,22 +128,19 @@ void main() {
       });
       final hoy = fechaDeHoy();
       enServidor = [
-        estudianteJson(1, autorizado: true, rostro: true),
+        estudianteJson(1),
         estudianteJson(2),
         estudianteJson(
           3,
           entrega: {
             'id': 9,
             'fecha': hoy,
-            'metodo': 'MANUAL',
+            'metodo': 'QR',
             'ocurrido_en': DateTime.now().toUtc().toIso8601String(),
           },
         ),
         estudianteJson(4, grado: '11', grupo: 'A'),
       ];
-      plantillasServidor = {
-        1: [vectorDe(1), vectorDe(1, ruido: 0.1)],
-      };
       lotes = [];
       hayRed = true;
       ApiClient.usarCliente(
@@ -204,21 +149,6 @@ void main() {
           switch (r.url.path) {
             case '/api/estudiantes/':
               return _json({'count': 4, 'next': null, 'results': enServidor});
-            case '/api/estudiantes/plantillas/':
-              return _json({
-                'grado': r.url.queryParameters['grado'],
-                'plantillas': [
-                  for (final e in plantillasServidor.entries)
-                    {'estudiante': e.key, 'vectores': e.value},
-                ],
-              });
-            case '/api/sincronizacion/configuracion/':
-              return _json({
-                'biometria_disponible': true,
-                'umbral_similitud_facial': 0.75,
-                'muestras_rostro_min': 3,
-                'muestras_rostro_max': 5,
-              });
             case '/api/sincronizacion/lote/':
               final cuerpo = jsonDecode(r.body) as Map<String, dynamic>;
               lotes.add(cuerpo);
@@ -241,8 +171,6 @@ void main() {
       final db = await DatabaseHelper.instance.database;
       await db.delete('operaciones');
       await db.delete('estudiantes_cache');
-      await db.delete('plantillas_cache');
-      repo.cofre = Cofre(AlmacenClaveEnMemoria());
       await SyncService.instance.iniciar(8);
       await repo.iniciar(8);
     });
@@ -257,143 +185,127 @@ void main() {
       final cursos = repo.cursos();
       expect(cursos.map((c) => c.curso), ['7° B', '11° A']);
       final septimo = cursos.first;
-      expect(
-        (septimo.activos, septimo.recibieron, septimo.conRostro),
-        (3, 1, 1),
-      );
+      expect((septimo.activos, septimo.recibieron), (3, 1));
+      expect(septimo.avance, closeTo(1 / 3, 1e-9));
       expect(repo.delCurso('7', 'B').map((e) => e.id), [1, 2, 3]);
-      // La configuración del servidor queda guardada.
-      await Future<void>.delayed(Duration.zero);
-      expect(repo.config.value.umbral, 0.75);
     });
 
-    test('sin red: la entrega se encola y se ve al instante', () async {
+    test('busca por código QR en la caché, sin red', () async {
       await repo.descargar();
       hayRed = false;
-      final ana = repo.porId(2)!;
-      await repo.entregar(ana, metodo: 'MANUAL', motivo: 'Sin cámara');
+      // Al reabrir la app sin red, la lista sale de la caché.
+      await repo.detener();
+      await repo.iniciar(8);
+
+      final ok = repo.porCodigoQr('PAEGO-E1:${codigoDe(2)}');
+      expect(ok.estado, EstadoLecturaQr.listo);
+      expect(ok.estudiante!.id, 2);
+      expect(ok.codigo, codigoDe(2));
+
+      expect(
+        repo.porCodigoQr('PAEGO-E1:${codigoDe(3)}').estado,
+        EstadoLecturaQr.yaRecibio,
+      );
+      expect(
+        repo.porCodigoQr('PAEGO-E1:otro-colegio').estado,
+        EstadoLecturaQr.noEncontrado,
+      );
+      expect(repo.porCodigoQr(codigoDe(2)).estado, EstadoLecturaQr.ajeno);
+      expect(
+        repo.porCodigoQr('https://paego.co').estado,
+        EstadoLecturaQr.ajeno,
+      );
+    });
+
+    test('sin red: la entrega por QR se encola y se ve al instante', () async {
+      await repo.descargar();
+      hayRed = false;
+      final lectura = repo.porCodigoQr('PAEGO-E1:${codigoDe(2)}');
+      await repo.entregar(
+        lectura.estudiante!,
+        metodo: 'QR',
+        codigo: lectura.codigo,
+      );
       final despues = repo.porId(2)!;
       expect(despues.recibioHoy, isTrue);
       expect(despues.entregaPendiente, isTrue);
+      expect(despues.entregaMetodo, 'QR');
       expect(SyncService.instance.estado.value.pendientes, 1);
-      // Una segunda entrega el mismo día se bloquea en el teléfono.
+      // Volver a escanearlo hoy avisa que ya recibió.
+      expect(
+        repo.porCodigoQr('PAEGO-E1:${codigoDe(2)}').estado,
+        EstadoLecturaQr.yaRecibio,
+      );
+      // Y una segunda entrega el mismo día se bloquea en el teléfono.
       expect(
         () => repo.entregar(despues, metodo: 'MANUAL', motivo: 'x'),
         throwsStateError,
       );
-      // Vuelve la red: se envía con la fecha del día.
+
+      // Vuelve la red: se envía con la fecha del día y el código leído.
       hayRed = true;
       await SyncService.instance.sincronizar();
       final op = (lotes.last['operaciones'] as List).single as Map;
       expect(op['tipo'], 'estudiante.entregar');
       expect(op['datos'], {
         'estudiante': 2,
-        'metodo': 'MANUAL',
+        'metodo': 'QR',
         'fecha': fechaDeHoy(),
-        'motivo': 'Sin cámara',
+        'codigo': codigoDe(2),
       });
-    });
-
-    test('autorizar e inscribir sin red; los vectores no quedan en la cola '
-        'después de enviarse', () async {
-      await repo.descargar();
-      hayRed = false;
-      final e = repo.porId(2)!;
-      await repo.autorizar(
-        e,
-        acudienteNombre: ' Rosa Pérez ',
-        acudienteDocumento: '123',
-        parentesco: 'Madre',
-      );
-      await repo.inscribir(
-        e,
-        vectores: [
-          vectorDe(2),
-          vectorDe(2, ruido: 0.1),
-          vectorDe(2, ruido: 0.1),
-        ],
-        modelo: 'mobilefacenet-tflite',
-      );
-      final local = repo.porId(2)!;
-      expect(local.autorizacionVigente, isTrue);
-      expect(local.rostroInscrito, isTrue);
-
-      // Sin red, el curso se reconoce con la caché + lo inscrito en el teléfono.
-      final plantillas = await repo.plantillasDelCurso('7', 'B');
-      expect(plantillas.keys, contains(2));
-      expect(
-        identificar(
-          vectorDe(2, ruido: 0.12),
-          plantillas,
-          umbral: 0.8,
-        )?.estudianteId,
-        2,
-      );
-
-      hayRed = true;
-      await SyncService.instance.sincronizar();
-      final tipos = [
-        for (final op in lotes.last['operaciones'] as List) op['tipo'],
-      ];
-      expect(tipos, ['estudiante.autorizar', 'estudiante.inscribir']);
       final historial = await SyncService.instance.historial(
         prefijo: 'estudiante.',
       );
-      expect(historial, hasLength(2));
-      final inscripcion = historial.firstWhere(
-        (o) => o.tipo == 'estudiante.inscribir',
-      );
-      expect(inscripcion.datos['vectores'], '(enviados)');
+      expect(historial.single.resumen, contains('Entrega (QR)'));
     });
 
-    test(
-      'las plantillas del curso se guardan cifradas para usarlas sin red',
-      () async {
-        await repo.descargar();
-        final enLinea = await repo.plantillasDelCurso('7', 'B');
-        expect(enLinea.keys, [1]);
-        final db = await DatabaseHelper.instance.database;
-        final fila = (await db.query('plantillas_cache')).single;
-        expect(fila['cifrado'] as String, isNot(contains('[')));
+    test('la entrega manual exige motivo y lo envía', () async {
+      await repo.descargar();
+      final e = repo.porId(1)!;
+      expect(
+        () => repo.entregar(e, metodo: 'MANUAL', motivo: '  '),
+        throwsArgumentError,
+      );
+      expect(() => repo.entregar(e, metodo: 'FACIAL'), throwsArgumentError);
+      hayRed = false;
+      await repo.entregar(e, metodo: 'MANUAL', motivo: ' No trajo el carné ');
+      final op = (await SyncService.instance.pendientes()).single;
+      expect(op.datos, {
+        'estudiante': 1,
+        'metodo': 'MANUAL',
+        'fecha': fechaDeHoy(),
+        'motivo': 'No trajo el carné',
+      });
+    });
 
-        hayRed = false;
-        final sinRed = await repo.plantillasDelCurso('7', 'B');
-        expect(sinRed[1]!.first, enLinea[1]!.first);
+    test('al cerrar sesión se borran los estudiantes', () async {
+      await repo.descargar();
+      await repo.borrarDatos();
+      final db = await DatabaseHelper.instance.database;
+      expect(await db.query('estudiantes_cache'), isEmpty);
+      expect(repo.estudiantes.value, isEmpty);
+    });
 
-        // Revocar (aún sin red) la quita de inmediato.
-        await repo.revocar(repo.porId(1)!, motivo: 'Lo pidió el acudiente');
-        expect(await repo.plantillasDelCurso('7', 'B'), isEmpty);
-        expect(repo.porId(1)!.rostroInscrito, isFalse);
-      },
-    );
-
-    test(
-      'al cerrar sesión se borran los estudiantes y las plantillas',
-      () async {
-        await repo.descargar();
-        await repo.plantillasDelCurso('7', 'B');
-        await repo.borrarDatos();
-        final db = await DatabaseHelper.instance.database;
-        expect(await db.query('estudiantes_cache'), isEmpty);
-        expect(await db.query('plantillas_cache'), isEmpty);
-        expect(repo.estudiantes.value, isEmpty);
-      },
-    );
-
-    test('la caché de ayer no cuenta como entrega de hoy', () {
-      final e = Estudiante.fromJson(
+    test('la caché de ayer no cuenta como entrega de hoy', () async {
+      final ayer = DateTime.now().subtract(const Duration(days: 1));
+      enServidor = [
         estudianteJson(
           5,
           entrega: {
             'id': 1,
-            'fecha': '2020-01-01',
+            'fecha': fechaDeHoy(ayer),
             'metodo': 'FACIAL',
-            'ocurrido_en': '2020-01-01T12:00:00Z',
+            'ocurrido_en': ayer.toUtc().toIso8601String(),
           },
         ),
-      );
+      ];
+      await repo.descargar();
+      final e = repo.porId(5)!;
       expect(e.recibioHoy, isFalse);
       expect(CursoResumen.de([e]).single.recibieron, 0);
+      // Se le puede registrar la entrega de hoy por QR.
+      final lectura = repo.porCodigoQr('PAEGO-E1:${codigoDe(5)}');
+      expect(lectura.estado, EstadoLecturaQr.listo);
     });
   });
 }

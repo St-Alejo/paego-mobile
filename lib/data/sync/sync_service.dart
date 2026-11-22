@@ -356,9 +356,6 @@ class SyncService {
   static Map<String, dynamic> _sinFotos(Map<String, dynamic> datos) {
     final copia = Map<String, dynamic>.from(datos);
     if (copia['foto'] != null) copia['foto'] = '(enviada)';
-    // Plantillas faciales (dato sensible): una vez en el servidor no se
-    // conservan en la cola del teléfono.
-    if (copia['vectores'] != null) copia['vectores'] = '(enviados)';
     final novedad = copia['novedad'];
     if (novedad is Map && novedad['foto'] != null) {
       copia['novedad'] = {...novedad, 'foto': '(enviada)'};

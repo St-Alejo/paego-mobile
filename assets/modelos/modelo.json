@@ -1,7 +1,0 @@
-{
-  "archivo": "mobile_facenet.tflite",
-  "nombre": "qualcomm-mobilefacenet-v0.66.0",
-  "rango": [0, 1],
-  "fuente": "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/mobile_facenet/releases/v0.66.0/mobile_facenet-tflite-float.zip",
-  "sha256": "2046ab776fba2ec7e420767ffe7eb74a7402a8412d3d7ea8b9f4ca8420e5f3d7"
-}

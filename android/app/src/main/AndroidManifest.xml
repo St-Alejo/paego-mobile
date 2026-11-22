@@ -2,7 +2,7 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.INTERNET"/>
-    <!-- Supervisor PAE: reconocimiento facial en el teléfono (sin fotos guardadas) -->
+    <!-- Supervisor PAE: escanear el código QR del estudiante (no se toman fotos) -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <!-- Rastreo del recorrido con la pantalla bloqueada: el plugin location usa
          un servicio en primer plano de tipo "location" con notificación. -->

@@ -41,12 +41,10 @@ dependencies:
   # Fonts
   google_fonts: ^6.2.1
   permission_handler: ^12.0.1
-  camera: ^0.12.0+2
-  google_mlkit_face_detection: ^0.14.0
-  tflite_flutter: ^0.12.1
-  image: ^4.12.0
-  cryptography: ^2.9.0
-  flutter_secure_storage: ^11.2.0
+
+  # Supervisor PAE: código QR por estudiante (ficha + lector)
+  mobile_scanner: ^7.1.2
+  qr_flutter: ^4.1.0
 
 
 dev_dependencies:
@@ -63,8 +61,6 @@ flutter:
   assets:
     - .env
     - assets/images/pae_logo.png
-    # Modelo de reconocimiento facial (opcional; ver assets/modelos/LEEME.md)
-    - assets/modelos/
 
 flutter_launcher_icons:
   android: true

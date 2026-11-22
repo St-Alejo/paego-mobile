@@ -27,7 +27,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>El supervisor PAE usa la cámara para reconocer a los estudiantes en la entrega del PAE. Las fotos no se guardan.</string>
+	<string>El supervisor PAE usa la cámara para escanear el código QR del estudiante al registrar la entrega del PAE. No se toman fotos.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>PAEGo usa tu ubicacion para mostrarte en el mapa y registrar rutas de entrega.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>

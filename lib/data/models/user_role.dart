@@ -46,7 +46,7 @@ extension UserRoleX on UserRole {
   /// Institución educativa: confirma la recepción (RF-24 a RF-28).
   bool get canConfirmReception => this == UserRole.rector;
 
-  /// Supervisor PAE: inscribe estudiantes y registra la entrega diaria.
+  /// Supervisor PAE: registra la entrega diaria (QR del estudiante o manual).
   bool get canRegisterStudents => this == UserRole.supervisor;
 
   /// Quién consulta la entrega del PAE por estudiante (solo lectura el rector).

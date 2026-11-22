@@ -11,7 +11,9 @@ import '../map/map_screen.dart';
 import '../nutrition/nutrition_screen.dart';
 import '../reports/reports_screen.dart';
 import '../profile/profile_screen.dart';
-import '../supervisor/supervisor_screens.dart';
+import '../supervisor/cursos_screen.dart';
+import '../supervisor/estudiantes_hoy_screen.dart';
+import '../supervisor/historial_screen.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({

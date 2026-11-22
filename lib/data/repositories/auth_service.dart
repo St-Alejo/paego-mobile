@@ -135,7 +135,7 @@ class AuthService {
       await SyncService.instance.sincronizar();
     } catch (_) {}
     await _detenerServicios();
-    // Datos de menores y plantillas faciales: no quedan en el teléfono.
+    // Datos de menores: no quedan en el teléfono.
     await EstudiantesRepository.instance.borrarDatos();
     await ApiClient.instance.cerrarSesion();
     _currentUser = null;

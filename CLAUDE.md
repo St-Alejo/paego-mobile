@@ -78,27 +78,32 @@ dart run flutter_launcher_icons  # regenerar íconos desde assets/images/pae_log
 - UI de envíos compartida en `lib/features/envios/envio_widgets.dart` (detalle, acciones por rol,
   novedad, confirmar recepción con código de 6 dígitos). Mapa, dashboard e informes leen de
   `EnvioRepository`/`SyncService`. Los usuarios se crean en la web (no hay pantalla de personal).
-- SQLite `paego.db` versión 7: `app_texts`, `envios_cache`, `operaciones`, `estudiantes_cache`,
-  `plantillas_cache`. La v6 borra las tablas del modo local anterior a la API (`users`, …).
+- SQLite `paego.db` versión 8: `app_texts`, `envios_cache`, `operaciones`, `estudiantes_cache`.
+  La v6 borra las tablas del modo local anterior a la API (`users`, …); la v8 borra
+  `plantillas_cache` y las operaciones `estudiante.autorizar|inscribir|revocar` de la cola.
 
 ### Supervisor PAE (`lib/features/supervisor/`, `repositories/estudiantes_repository.dart`)
+- Entrega diaria por **código QR** único por estudiante (reemplazó al reconocimiento facial: no hay
+  biometría, plantillas, cifrado ni autorización del acudiente). El QR impreso del carné contiene
+  `PAEGO-E1:<codigo_qr>` (`prefijoQr`/`codigoDeQr` en `models/estudiante.dart`); `codigo_qr` es un
+  token aleatorio del servidor y para el rol institución puede venir null.
 - Pestañas propias en `HomeShell` (Cursos, Historial, Perfil); no maneja envíos. El rector ve la
-  pestaña de solo lectura "Estudiantes" (`GET /api/estudiantes/cursos/`, en línea).
+  pestaña de solo lectura "Estudiantes" (`estudiantes_hoy_screen.dart`, `GET /api/estudiantes/cursos/`, en línea).
+- Pantallas: `cursos_screen.dart` (avance del día por curso + "Escanear QR" de toda la institución),
+  `curso_screen.dart` (búsqueda, filtros, botón principal "Escanear QR"), `estudiante_screen.dart`
+  (ficha con el QR grande vía `qr_flutter`, estado de hoy y "Entrega manual" con motivo),
+  `escaner_qr_screen.dart` (`mobile_scanner` continuo → hoja de confirmación → registra y sigue;
+  avisa QR ajeno, no encontrado en la institución y "ya recibió hoy"; háptica),
+  `historial_screen.dart`, piezas comunes en `supervisor_comun.dart`. Las pruebas inyectan el
+  lector con `EscanerQrScreen(lector: …)` o `EscanerQrScreen.lectorDePrueba`.
 - Descarga la institución (`GET /api/estudiantes/?page_size=500`) a `estudiantes_cache`; el avance
   por curso se calcula en el teléfono. `entrega_del_dia` de la caché solo cuenta si su fecha es hoy.
-- Acciones `estudiante.autorizar|inscribir|entregar|revocar` → cola de `SyncService` (sin red),
-  aplicadas al instante sobre la lista. Los vectores se reemplazan por `(enviados)` en la cola al
-  sincronizar. Historial = operaciones `estudiante.*` de la cola.
-- Reconocimiento 1:N por curso en el teléfono: `services/rostro/` — `extractor.dart` (interfaz,
-  import condicional: `extractor_movil.dart` con ML Kit + `tflite_flutter` en Android/iOS,
-  `ExtractorNoDisponible` en web), `comparador.dart` (coseno, umbral del servidor
-  `umbral_similitud_facial`), `preprocesado.dart`, `cofre.dart` (AES-256-GCM, clave en
-  `flutter_secure_storage`, se destruye al cerrar sesión junto con las cachés).
-- Modelo `assets/modelos/mobilefacenet.tflite` **fuera de git** (licencia de los pesos, ver
-  `assets/modelos/LEEME.md`); sin él la app compila y todo es registro manual. Prueba de vida:
-  girar la cabeza (ML Kit `headEulerAngleY`) antes de la foto de frente. Las fotos se borran tras
-  analizarlas; nunca se guardan. Ley 1581: sin autorización del acudiente no se inscribe, y
-  siempre existe la entrega manual con motivo.
+  `porCodigoQr` busca en la caché (sin red).
+- Única acción: `estudiante.entregar` `{estudiante, metodo: QR|MANUAL, fecha, codigo | motivo}` →
+  cola de `SyncService` (sin red), aplicada al instante sobre la lista; el servidor rechaza con
+  `qr_invalido` o `duplicada`. Entregas antiguas con `metodo` `FACIAL` se muestran como
+  "Reconocimiento facial". Historial = operaciones `estudiante.*` de la cola. Al cerrar sesión se
+  borra `estudiantes_cache`.
 
 ### Mapa base (`lib/core/config/mapa_base.dart`)
 - `flutter_map` (código abierto) con teselas del servicio **Static Basemap Tiles de ArcGIS
