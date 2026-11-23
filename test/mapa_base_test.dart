@@ -73,4 +73,76 @@ void main() {
       expect(textos, contains('Powered by Esri'));
     });
   });
+
+  group('con token de Mapbox', () {
+    setUp(
+      () => dotenv.testLoad(
+        fileInput: 'MAPBOX_ACCESS_TOKEN=pk.prueba\nARCGIS_API_KEY=clave',
+      ),
+    );
+
+    test('el mapa 3D de Mapbox es el principal y va primero', () async {
+      await MapaBase.cargar();
+      expect(MapaBase.estilo.value, EstiloMapa.mapbox3d);
+      expect(MapaBase.estilo.value.es3d, isTrue);
+      expect(MapaBase.disponibles.first, EstiloMapa.mapbox3d);
+      expect(MapaBase.disponibles, contains(EstiloMapa.mapboxNavegacion));
+      expect(MapaBase.disponibles, contains(EstiloMapa.calles));
+      expect(MapaBase.disponibles.last, EstiloMapa.openStreetMap);
+    });
+
+    test('la capa raster del 3D (respaldo) usa Calles', () {
+      expect(
+        MapaBase.capa(EstiloMapa.mapbox3d).urlTemplate,
+        contains('mapbox/streets-v12'),
+      );
+    });
+
+    test('la capa usa la Static Tiles API con teselas de 512 px', () {
+      final capa = MapaBase.capa(EstiloMapa.mapboxCalles, retina: true);
+      expect(
+        capa.urlTemplate,
+        'https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/512/'
+        '{z}/{x}/{y}{r}?access_token={token}',
+      );
+      expect(capa.additionalOptions['token'], 'pk.prueba');
+      expect(capa.tileSize, 512);
+      expect(capa.zoomOffset, -1);
+    });
+
+    test('en tema oscuro la navegación pasa a la nocturna sin invertir', () {
+      expect(
+        MapaBase.efectivo(EstiloMapa.mapboxNavegacion, oscuro: true),
+        EstiloMapa.mapboxNocturno,
+      );
+      expect(
+        MapaBase.efectivo(EstiloMapa.mapboxSatelite, oscuro: true),
+        EstiloMapa.mapboxSatelite,
+      );
+      expect(MapaBase.invertirEnOscuro(EstiloMapa.mapboxCalles), isFalse);
+      expect(MapaBase.invertirEnOscuro(EstiloMapa.openStreetMap), isTrue);
+    });
+
+    test('muestra el logo y la atribución de Mapbox y OpenStreetMap', () {
+      final atribuciones = MapaBase.atribuciones(EstiloMapa.mapboxClaro);
+      expect(atribuciones.whereType<LogoSourceAttribution>(), hasLength(1));
+      final textos = atribuciones.whereType<TextSourceAttribution>().map(
+        (a) => a.text,
+      );
+      expect(textos, containsAll(['© Mapbox', '© OpenStreetMap']));
+      expect(textos, contains('Mejorar este mapa'));
+    });
+  });
+
+  test(
+    'sin token, un estilo de Mapbox guardado vuelve al de por defecto',
+    () async {
+      dotenv.testLoad(fileInput: 'PAEGO_API_URL=http://x');
+      SharedPreferences.setMockInitialValues({
+        'paego_estilo_mapa': EstiloMapa.mapboxSatelite.name,
+      });
+      await MapaBase.cargar();
+      expect(MapaBase.estilo.value, EstiloMapa.openStreetMap);
+    },
+  );
 }

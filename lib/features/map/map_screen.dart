@@ -15,6 +15,7 @@ import '../../data/remote/api_client.dart';
 import '../../data/repositories/envio_repository.dart';
 import '../../data/services/rastreo_service.dart';
 import '../envios/envio_widgets.dart';
+import 'mapa_3d.dart';
 
 /// Mapa con los envíos del usuario y su posición real.
 ///
@@ -50,6 +51,7 @@ class _MapScreenState extends State<MapScreen> {
   static const _centroPorDefecto = LatLng(1.2136, -77.2811);
 
   final _mapCtrl = MapController();
+  final _mapa3d = Mapa3DController();
   final List<LatLng> _recorrido = [];
   List<_ConductorEnVivo> _enVivo = [];
   Timer? _timerEnVivo;
@@ -161,7 +163,7 @@ class _MapScreenState extends State<MapScreen> {
                   color: PaeColors.primary,
                 ),
                 title: Text(S.isSpanish ? e.nombreEs : e.nombreEn),
-                subtitle: Text(e.esArcgis ? 'ArcGIS' : 'OpenStreetMap'),
+                subtitle: Text(e.nombreProveedor),
                 onTap: () => Navigator.pop(ctx, e),
               ),
           ],
@@ -179,6 +181,10 @@ class _MapScreenState extends State<MapScreen> {
   void _mover(LatLng destino, double zoom) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      if (MapaBase.estilo.value.es3d && MapaBase.hayMapbox) {
+        _mapa3d.mover(destino, zoom);
+        return;
+      }
       try {
         _mapCtrl.move(destino, zoom);
       } catch (_) {
@@ -204,6 +210,52 @@ class _MapScreenState extends State<MapScreen> {
     _mover(p, 15.5);
   }
 
+  /// Mapa principal: Mapbox Standard en 3D.
+  Widget _mapaEn3d(List<Envio> activos, bool isDark) {
+    return ValueListenableBuilder<LatLng?>(
+      valueListenable: RastreoService.instance.posicion,
+      builder: (context, yo, _) => Mapa3D(
+        controller: _mapa3d,
+        oscuro: isDark,
+        margenInferior: activos.isEmpty ? 96 : 224,
+        centro:
+            yo ??
+            activos.map((e) => e.institucion.latLng).nonNulls.firstOrNull ??
+            _centroPorDefecto,
+        recorrido: List.of(_recorrido),
+        puntos: [
+          for (final e in activos)
+            if (e.institucion.latLng != null)
+              PuntoMapa(
+                id: 'envio-${e.id}',
+                posicion: e.institucion.latLng!,
+                tipo: TipoPunto.institucion,
+                color: e.estado.color,
+              ),
+          for (final (i, c) in _enVivo.indexed)
+            PuntoMapa(
+              id: 'vivo-$i',
+              posicion: c.posicion,
+              tipo: TipoPunto.vehiculo,
+              etiqueta: c.placa ?? c.nombre,
+            ),
+          if (yo != null)
+            PuntoMapa(
+              id: 'yo',
+              posicion: yo,
+              tipo: widget.user.role.canDriveRoute
+                  ? TipoPunto.conductorPropio
+                  : TipoPunto.yo,
+            ),
+        ],
+        onTapPunto: (id) {
+          final envio = activos.where((e) => 'envio-${e.id}' == id).firstOrNull;
+          if (envio != null) mostrarDetalleEnvio(context, envio, widget.user);
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -219,15 +271,27 @@ class _MapScreenState extends State<MapScreen> {
         return Scaffold(
           body: Stack(
             children: [
-              ColorFiltered(
-                colorFilter: isDark
-                    ? const ColorFilter.matrix(<double>[
-                        -0.85, 0, 0, 0, 255, //
-                        0, -0.85, 0, 0, 255, //
-                        0, 0, -0.85, 0, 255, //
-                        0, 0, 0, 1, 0,
-                      ])
-                    : const ColorFilter.mode(Colors.transparent, BlendMode.dst),
+              ValueListenableBuilder<EstiloMapa>(
+                valueListenable: MapaBase.estilo,
+                builder: (context, elegido, mapa) =>
+                    elegido.es3d && MapaBase.hayMapbox
+                    ? _mapaEn3d(activos, isDark)
+                    : ColorFiltered(
+                        // Mapbox tiene estilo nocturno propio; los demás se invierten.
+                        colorFilter:
+                            isDark && MapaBase.invertirEnOscuro(elegido)
+                            ? const ColorFilter.matrix(<double>[
+                                -0.85, 0, 0, 0, 255, //
+                                0, -0.85, 0, 0, 255, //
+                                0, 0, -0.85, 0, 255, //
+                                0, 0, 0, 1, 0,
+                              ])
+                            : const ColorFilter.mode(
+                                Colors.transparent,
+                                BlendMode.dst,
+                              ),
+                        child: mapa,
+                      ),
                 child: FlutterMap(
                   mapController: _mapCtrl,
                   options: MapOptions(
@@ -243,7 +307,10 @@ class _MapScreenState extends State<MapScreen> {
                   children: [
                     ValueListenableBuilder<EstiloMapa>(
                       valueListenable: MapaBase.estilo,
-                      builder: (context, estilo, _) => MapaBase.capa(estilo),
+                      builder: (context, estilo, _) => MapaBase.capa(
+                        MapaBase.efectivo(estilo, oscuro: isDark),
+                        retina: RetinaMode.isHighDensity(context),
+                      ),
                     ),
                     if (_recorrido.length > 1)
                       PolylineLayer(
@@ -307,10 +374,18 @@ class _MapScreenState extends State<MapScreen> {
                     ),
                     ValueListenableBuilder<EstiloMapa>(
                       valueListenable: MapaBase.estilo,
-                      builder: (context, estilo, _) => RichAttributionWidget(
-                        // La clave fuerza a reconstruirla al cambiar de estilo.
-                        key: ValueKey(estilo),
-                        attributions: MapaBase.atribuciones(estilo),
+                      builder: (context, estilo, _) => Padding(
+                        // Encima del panel de envíos: el logo de Mapbox y la
+                        // atribución deben quedar visibles (términos de uso).
+                        padding: EdgeInsets.only(
+                          bottom: activos.isEmpty ? 96 : 224,
+                        ),
+                        child: RichAttributionWidget(
+                          // La clave fuerza a reconstruirla al cambiar de estilo.
+                          key: ValueKey(estilo),
+                          alignment: AttributionAlignment.bottomLeft,
+                          attributions: MapaBase.atribuciones(estilo),
+                        ),
                       ),
                     ),
                   ],

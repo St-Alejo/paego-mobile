@@ -41,6 +41,8 @@ dependencies:
   # Fonts
   google_fonts: ^6.2.1
   permission_handler: ^12.0.1
+  url_launcher: ^6.3.3
+  mapbox_maps_flutter: ^3.35.2
 
 
 dev_dependencies:

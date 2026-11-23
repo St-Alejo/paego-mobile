@@ -21,6 +21,7 @@ env:
   PAEGO_API_URL: ${{ vars.PAEGO_API_URL || 'https://azwafmsbgbksw4m22.azurewebsites.net' }}
   # Clave de los mapas base de ArcGIS (secreto opcional; sin ella se usa OpenStreetMap).
   ARCGIS_API_KEY: ${{ secrets.ARCGIS_API_KEY }}
+  MAPBOX_ACCESS_TOKEN: ${{ secrets.MAPBOX_ACCESS_TOKEN }}
   # Cobertura real de lib/ (con las pantallas). Subirla a medida que se agregan pruebas.
   COBERTURA_MINIMA: "25"
 
@@ -37,7 +38,7 @@ jobs:
           cache: true
       # .env es un asset declarado en pubspec.yaml: sin él no compila.
       - name: Crear .env de CI
-        run: echo "PAEGO_API_URL=$PAEGO_API_URL" > .env && echo "ARCGIS_API_KEY=$ARCGIS_API_KEY" >> .env
+        run: echo "PAEGO_API_URL=$PAEGO_API_URL" > .env && echo "ARCGIS_API_KEY=$ARCGIS_API_KEY" >> .env && echo "MAPBOX_ACCESS_TOKEN=$MAPBOX_ACCESS_TOKEN" >> .env
       - run: flutter pub get
       - name: Análisis estático (cualquier aviso bloquea)
         run: flutter analyze
@@ -78,7 +79,7 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
-      - run: echo "PAEGO_API_URL=$PAEGO_API_URL" > .env && echo "ARCGIS_API_KEY=$ARCGIS_API_KEY" >> .env
+      - run: echo "PAEGO_API_URL=$PAEGO_API_URL" > .env && echo "ARCGIS_API_KEY=$ARCGIS_API_KEY" >> .env && echo "MAPBOX_ACCESS_TOKEN=$MAPBOX_ACCESS_TOKEN" >> .env
       - run: flutter pub get
       - run: flutter build web --release
       - uses: actions/upload-artifact@v4
@@ -103,7 +104,7 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
-      - run: echo "PAEGO_API_URL=$PAEGO_API_URL" > .env && echo "ARCGIS_API_KEY=$ARCGIS_API_KEY" >> .env
+      - run: echo "PAEGO_API_URL=$PAEGO_API_URL" > .env && echo "ARCGIS_API_KEY=$ARCGIS_API_KEY" >> .env && echo "MAPBOX_ACCESS_TOKEN=$MAPBOX_ACCESS_TOKEN" >> .env
       - run: flutter pub get
       - run: flutter build apk --release
       - uses: actions/upload-artifact@v4

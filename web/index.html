@@ -31,6 +31,10 @@
 
   <title>paego</title>
   <link rel="manifest" href="manifest.json">
+  <!-- Mapa 3D (Mapbox GL JS): sus controles (logo, atribución, brújula)
+       tienen z-index propio; sin esto se ven por encima de los paneles de
+       Flutter que tapan el mapa. -->
+  <style>.mapboxgl-map { isolation: isolate; }</style>
 </head>
 <body>
   <!--

@@ -81,8 +81,27 @@ dart run flutter_launcher_icons  # regenerar íconos desde assets/images/pae_log
   del modo local anterior a la API (`users`, `delivery_orders`, …).
 
 ### Mapa base (`lib/core/config/mapa_base.dart`)
-- `flutter_map` (código abierto) con teselas del servicio **Static Basemap Tiles de ArcGIS
-  Location Platform** si `ARCGIS_API_KEY` está en `.env`; sin clave, OpenStreetMap. Teselas de
+- **Mapa principal: Mapbox Standard en 3D** (`EstiloMapa.mapbox3d`, por defecto con token):
+  `lib/features/map/mapa_3d.dart` con el SDK oficial `mapbox_maps_flutter` (Android, iOS y web;
+  en web carga Mapbox GL JS solo). Edificios 3D, cámara inclinada 58°, luz `dawn/day/dusk/night`
+  según la hora (noche en tema oscuro). Marcadores y recorrido son fuentes GeoJSON + capas
+  (`SymbolLayer`/`LineLayer`, íconos dibujados en `Canvas`), no anotaciones: las anotaciones no
+  existen en web. Toque en un pin → `TapInteraction` → detalle del envío. El token se registra en
+  `MapaBase.configurar()` (main). En `web/index.html`, `.mapboxgl-map { isolation: isolate }`
+  evita que el logo/atribución de GL JS se vean encima de los paneles de Flutter. Si un build
+  web falla con "No default instance of MapboxMapsFlutterPlatform", borrar
+  `.dart_tool/flutter_build` (registrante de plugins web viejo en caché).
+- Los demás estilos usan `flutter_map` (código abierto) con teselas raster: **Mapbox** (Static Tiles
+  API de los estilos oficiales `mapbox/navigation-day-v1`, `streets-v12`, `outdoors-v12`,
+  `light-v11`, `navigation-night-v1`, `satellite-streets-v12`) si `MAPBOX_ACCESS_TOKEN` (token
+  público `pk.…`) está en `.env`. URL `https://api.mapbox.com/styles/v1/{usuario}/{estilo}/tiles/512/{z}/{x}/{y}{r}?access_token=`,
+  `tileSize: 512` + `zoomOffset: -1`, `{r}` = `@2x` en pantallas densas. En tema oscuro la
+  navegación pasa a `navigation-night` (no se invierten colores, como sí con OSM/ArcGIS).
+  Atribución obligatoria: logo "mapbox", "© Mapbox", "© OpenStreetMap" y "Mejorar este mapa"
+  (abren con `url_launcher`). Capa gratuita: 200 000 teselas/mes. Un estilo propio de Mapbox
+  Studio se agrega como otro valor de `EstiloMapa` con ruta `{usuario}/{id}`.
+- Alternativas: **ArcGIS Static Basemap Tiles** si `ARCGIS_API_KEY` está en `.env`; siempre
+  OpenStreetMap. ArcGIS: teselas de
   512 px → `tileSize: 512` + `zoomOffset: -1`; URL `.../v1/{familia}/{estilo}/static/tile/{z}/{y}/{x}?token=`
   (fila antes que columna). Capa gratuita: 2 M teselas/mes, sin tope automático → restringir la
   clave en location.arcgis.com. Atribución "Powered by Esri" obligatoria. El estilo elegido se
@@ -101,7 +120,8 @@ dart run flutter_launcher_icons  # regenerar íconos desde assets/images/pae_log
 
 ## CI/CD (`.github/`)
 
-- Secreto opcional `ARCGIS_API_KEY` (mapas de ArcGIS en los builds de CI y release).
+- Secretos opcionales `MAPBOX_ACCESS_TOKEN` (mapa principal) y `ARCGIS_API_KEY` en los builds de
+  CI y release; sin ellos el APK usa OpenStreetMap.
 - `ci.yml`: `flutter analyze` (cualquier aviso, incluso info, bloquea), `dart format
   --set-exit-if-changed lib test` (bloquea: formatear antes de commitear), `flutter test --coverage`
   con un archivo generado que importa todo `lib/` (cobertura real, con pantallas) y mínimo

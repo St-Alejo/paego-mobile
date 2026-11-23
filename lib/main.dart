@@ -7,6 +7,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 
 import 'app/app.dart';
+import 'core/config/mapa_base.dart';
 import 'core/l10n/app_strings.dart';
 import 'data/repositories/app_text_sync_service.dart';
 
@@ -22,6 +23,9 @@ Future<void> main() async {
   } catch (_) {
     // The app can still run with local defaults when .env is absent.
   }
+
+  // Token de Mapbox para el mapa 3D (si está en .env).
+  MapaBase.configurar();
 
   await initializeDateFormatting('es');
 
